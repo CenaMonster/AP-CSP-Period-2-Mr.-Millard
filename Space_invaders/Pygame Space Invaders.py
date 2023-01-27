@@ -2,7 +2,10 @@
 	#Brandon Le											#
 	#Description: Using pygame, Space Invaders is       #
     # recreated. Where you shoot the aliens	and move    #
-    # side to side dodging enemy fire. 					#
+    # side to side dodging enemy fire. With added 		#
+	# difficulties and a wall to assisst both sides.	# 
+	# Difficulty slows down the player ship and makes	#
+	# fire rate slower as well.   					    #
 	#													#
 	#													#
 	#													#
@@ -32,6 +35,7 @@ pygame.init()
 #define fps
 clock = pygame.time.Clock()
 fps = 60
+
 
 
 screen_width = 600
@@ -65,6 +69,8 @@ last_alien_shot = pygame.time.get_ticks()
 countdown = 3
 last_count = pygame.time.get_ticks()
 game_over = 0#0 is no game over, 1 means player has won, -1 means player has lost
+difficulty = input("Set difficulty: 1 = easy, 2 = medium, 3 = hard: ")#asks user to input their wanted difficulty
+
 
 #define colours
 red = (255, 0, 0)
@@ -99,12 +105,29 @@ class Spaceship(pygame.sprite.Sprite):
 		self.last_shot = pygame.time.get_ticks()
 
 
-	def update(self):
+	def update(self, level):
 		#set movement speed
 		speed = 8
 		#set a cooldown variable
 		cooldown = 500 #milliseconds
 		game_over = 0
+
+		if difficulty == "1":
+			#set movement speed based on difficulty
+			speed = 12
+			#set a cooldown variable based on difficulty
+			cooldown = 2 #milliseconds
+		if difficulty == "2":
+			speed = 8
+			cooldown = 500 #milliseconds
+		if difficulty == "3":
+			speed = 1
+			cooldown = 1000 #milliseconds
+		else:
+			speed = 8
+			cooldown = 500 #milliseconds	
+		game_over = 0
+
 
 
 		#get key press
@@ -139,7 +162,43 @@ class Spaceship(pygame.sprite.Sprite):
 			game_over = -1
 		return game_over
 
+class wall(pygame.sprite.Sprite):
+	def __init__(self, x, y, health):
+		pygame.sprite.Sprite.__init__(self)
+		self.image = pygame.image.load("wall.png")
+		self.rect = self.image.get_rect()
+		self.rect.center = [x, y]
+		self.move_counter = 0
+		self.move_direction = 1
+		self.health_start = health
+		self.health_remaining = health
+	
+	def update(self):
+		self.rect.x += self.move_direction
+		self.move_counter += 1
+		if abs(self.move_counter) > 120:
+			self.move_direction *= -1
+			self.move_counter *= self.move_direction
+		if pygame.sprite.spritecollide(self, bullet_group, True):
+			explosion_fx.play()
+			explosion = Explosion(self.rect.centerx, self.rect.centery, 2)
+			explosion_group.add(explosion)
+			self.health_remaining -=1
+		if pygame.sprite.spritecollide(self, alien_bullet_group, True):
+			explosion_fx.play()
+			explosion = Explosion(self.rect.centerx, self.rect.centery, 2)
+			explosion_group.add(explosion)
+			self.health_remaining -=1
+		elif self.health_remaining <= 0:
+			explosion = Explosion(self.rect.centerx, self.rect.centery, 3)
+			explosion_group.add(explosion)
+			self.kill()
+		self.mask = pygame.mask.from_surface(self.image)
 
+
+
+
+		
 
 #create Bullets class
 class Bullets(pygame.sprite.Sprite):
@@ -178,61 +237,6 @@ class Aliens(pygame.sprite.Sprite):
 		if abs(self.move_counter) > 75:
 			self.move_direction *= -1
 			self.move_counter *= self.move_direction
-
-class Mystery(pygame.sprite.Sprite):
-    def __init__(self):
-        sprite.Sprite.__init__(self)
-        self.image = pygame.image.load('mystery.png')
-        self.image = transform.scale(self.image, (75, 35))
-        self.rect = self.image.get_rect(topleft=(-80, 45))
-        self.row = 5
-        self.moveTime = 25000
-        self.direction = 1
-        self.timer = time.get_ticks()
-        self.mysteryEntered = pygame.mixer.Sound(SOUND_PATH + 'mysteryentered.wav')
-        self.mysteryEntered.set_volume(0.3)
-        self.playSound = True
-
-    def update(self, keys, currentTime, *args):
-        resetTimer = False
-        passed = currentTime - self.timer
-        if passed > self.moveTime:
-            if (self.rect.x < 0 or self.rect.x > 800) and self.playSound:
-                self.mysteryEntered.play()
-                self.playSound = False
-            if self.rect.x < 840 and self.direction == 1:
-                self.mysteryEntered.fadeout(4000)
-                self.rect.x += 2
-                game.screen.blit(self.image, self.rect)
-            if self.rect.x > -100 and self.direction == -1:
-                self.mysteryEntered.fadeout(4000)
-                self.rect.x -= 2
-                game.screen.blit(self.image, self.rect)
-
-        if self.rect.x > 830:
-            self.playSound = True
-            self.direction = -1
-            resetTimer = True
-        if self.rect.x < -90:
-            self.playSound = True
-            self.direction = 1
-            resetTimer = True
-        if passed > self.moveTime and resetTimer:
-            self.timer = currentTime
-
-class MysteryExplosion(pygame.sprite.Sprite):
-    def __init__(self, mystery, score, *groups):
-        super(MysteryExplosion, self).__init__(*groups)
-        self.text = Text(FONT, 20, str(score), WHITE,
-                         mystery.rect.x + 20, mystery.rect.y + 6)
-        self.timer = time.get_ticks()
-
-    def update(self, current_time, *args):
-        passed = current_time - self.timer
-        if passed <= 200 or 400 < passed <= 600:
-            self.text.draw(game.screen)
-        elif 600 < passed:
-            self.kill()
 
 
 #create Alien Bullets class
@@ -300,6 +304,7 @@ class Explosion(pygame.sprite.Sprite):
 
 
 #create sprite groups
+wall_group = pygame.sprite.Group()
 spaceship_group = pygame.sprite.Group()
 bullet_group = pygame.sprite.Group()
 alien_group = pygame.sprite.Group()
@@ -314,14 +319,16 @@ def create_aliens():
 			alien = Aliens(100 + item * 100, 100 + row * 70)
 			alien_group.add(alien)
 
-create_aliens()
 
+
+create_aliens()
 
 #create player
 spaceship = Spaceship(int(screen_width / 2), screen_height - 100, 3)
 spaceship_group.add(spaceship)
 
-
+wall = wall(int(screen_width/2), 500, 999)
+wall_group.add(wall)
 
 run = True
 while run:
@@ -349,12 +356,13 @@ while run:
 
 		if game_over == 0:
 			#update spaceship
-			game_over = spaceship.update()
+			game_over = spaceship.update(difficulty)
 
 			#update sprite groups
 			bullet_group.update()
 			alien_group.update()
 			alien_bullet_group.update()
+			wall_group.update()
 		else:
 			if game_over == -1:
 				draw_text('GAME OVER!', font40, white, int(screen_width / 2 - 100), int(screen_height / 2 + 50))
@@ -380,7 +388,7 @@ while run:
 	alien_group.draw(screen)
 	alien_bullet_group.draw(screen)
 	explosion_group.draw(screen)
-
+	wall_group.draw(screen)
 
 	#event handlers
 	for event in pygame.event.get():
